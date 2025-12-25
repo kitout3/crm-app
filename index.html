@@ -1,0 +1,316 @@
+Voici un **brief développeur SIMPLE** en **HTML / CSS / JavaScript pur**, avec **Firebase Auth + Firestore**, déployable sur **GitHub Pages**, et une organisation **type Trello** (Kanban).
+
+---
+
+## BRIEF DÉVELOPPEUR — CRM SIMPLE (HTML/CSS/JS + Firebase + GitHub Pages)
+
+### 1) Objectif
+
+Créer une web-app **perso** (1 utilisateur) pour gérer :
+
+* **Clients**
+* **Opportunités (Deals)**
+* **Événements**
+* **Organisation** via **Kanban type Trello** (colonnes + cartes en drag & drop)
+* **Planning Outlook** via **export ICS**
+* **Offline** + **Export/Import JSON** pour sauvegarde locale
+
+---
+
+## 2) Contraintes techniques
+
+* **100% Front** : aucune API serveur, aucun Node backend.
+* **Firebase seulement** :
+
+  * Firebase Authentication (email/mot de passe)
+  * Cloud Firestore (base)
+* **Déploiement GitHub Pages** (site statique)
+* **Données locales** :
+
+  * Offline Firestore (cache navigateur)
+  * Sauvegarde manuelle via export/import `.json`
+
+---
+
+## 3) Stack (imposée)
+
+* HTML5 / CSS3 / JavaScript ES Modules
+* Firebase Web SDK (modules)
+* Pas de framework (pas React/Vue)
+* Drag & Drop : API HTML5 native (simple)
+  *(option si besoin plus tard : SortableJS, mais à éviter si tu veux strict “pur”)*
+
+---
+
+## 4) Fonctionnalités (simple, mais complet)
+
+### 4.1 Auth (Firebase)
+
+* Écran login :
+
+  * email + mot de passe
+  * bouton login / logout
+* Après login :
+
+  * charger toutes les données **du user connecté** (`ownerUid`)
+
+### 4.2 Navigation (ultra simple)
+
+Menu latéral :
+
+* Home
+* Board (Kanban)
+* Clients
+* Deals
+* Events
+* Backup (Export/Import)
+* Settings (min)
+
+### 4.3 Home (tableau de bord)
+
+* Cartes **en retard** / **aujourd’hui**
+* Deals à relancer (deal sans “prochaine action”)
+* Événements à venir
+* Bouton : “Nouvelle carte”
+
+### 4.4 Kanban type Trello (central)
+
+#### Board
+
+* 1 board global par défaut
+* 1 board par événement (optionnel, mais recommandé)
+
+#### Colonnes fixes (par défaut)
+
+* À faire
+* En cours
+* En attente
+* Terminé
+
+#### Cartes (champs minimum)
+
+* Titre
+* Description
+* Date limite (dueDate)
+* Priorité : basse / normale / haute
+* Labels (liste texte ou couleurs simples)
+* Liens :
+
+  * clientId (option)
+  * dealId (option)
+  * eventId (option)
+* Checklist simple (liste d’items)
+
+#### Interactions obligatoires
+
+* Drag & drop cartes entre colonnes
+* Réordonner cartes dans la colonne (simple : en drop, recalcul `order`)
+* Clic carte → panneau latéral (drawer) éditable
+* Ajout rapide de carte dans une colonne
+
+### 4.5 Clients
+
+* CRUD client : nom, notes, tags
+* Fiche client : liste des cartes liées + deals + événements
+
+### 4.6 Deals (opportunités)
+
+* CRUD deal :
+
+  * nom
+  * client
+  * montant estimé
+  * statut : Lead / Devis / Gagné / Perdu
+  * prochaine action + date (pour relances)
+* Vue liste simple + filtres statut
+
+### 4.7 Events (événements)
+
+* CRUD event :
+
+  * nom
+  * client
+  * dates (start/end)
+  * statut
+* Board par event (filtrer cartes par `eventId`)
+
+### 4.8 Export Outlook (ICS)
+
+* Bouton “Exporter calendrier Outlook (.ics)”
+* Contenu ICS :
+
+  * cartes avec `dueDate` (événement de 30 min par défaut)
+  * événements (start/end)
+* Import ICS : **optionnel** (pas prioritaire)
+
+### 4.9 Offline + Backup local
+
+* Activer offline persistence Firestore (cache navigateur)
+* Backup :
+
+  * Export JSON (toutes collections user)
+  * Import JSON (ré-écrit les docs)
+
+> Important : sur un site web, on ne peut pas écrire automatiquement sur ton disque sans interaction → **export/import** = solution simple.
+
+---
+
+## 5) Modèle de données Firestore (minimal)
+
+Chaque document contient `ownerUid`.
+
+Collections :
+
+* `clients`
+
+  * `{ id, ownerUid, name, notes, tags[], createdAt }`
+
+* `deals`
+
+  * `{ id, ownerUid, name, clientId, amount, status, nextAction, nextActionDate, createdAt }`
+
+* `events`
+
+  * `{ id, ownerUid, name, clientId, startDate, endDate, status, createdAt }`
+
+* `boards`
+
+  * `{ id, ownerUid, name, eventId|null, createdAt }`
+
+* `lists`
+
+  * `{ id, ownerUid, boardId, title, order }`
+
+* `cards`
+
+  * `{ id, ownerUid, boardId, listId, title, description, dueDate|null, priority, labels[], clientId?, dealId?, eventId?, order }`
+
+* `checklistItems`
+
+  * `{ id, ownerUid, cardId, title, done, order }`
+
+---
+
+## 6) Règles Firestore (simple et sécurisées)
+
+Principe : lecture/écriture uniquement sur ses docs.
+
+*(à coller dans Firestore Rules)*
+
+```js
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isOwner() {
+      return request.auth != null && request.auth.uid == resource.data.ownerUid;
+    }
+    function isOwnerCreate() {
+      return request.auth != null && request.auth.uid == request.resource.data.ownerUid;
+    }
+
+    match /{collection}/{docId} {
+      allow create: if isOwnerCreate();
+      allow read, update, delete: if isOwner();
+    }
+  }
+}
+```
+
+---
+
+## 7) Structure fichiers (GitHub Pages ready)
+
+```
+/index.html
+/css/styles.css
+/js/app.js
+/js/firebase.js
+/js/auth.js
+/js/db.js
+/js/ui.js
+/js/kanban.js
+/js/backup.js
+/js/ics.js
+```
+
+---
+
+## 8) Intégration Firebase (ton snippet)
+
+Créer `js/firebase.js` :
+
+```js
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js";
+import { getAuth } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-auth.js";
+import { getFirestore } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyBqB0E-hdqYxKel9bg3pKoK6zaPUA-MO1I",
+  authDomain: "crm-app-2733e.firebaseapp.com",
+  projectId: "crm-app-2733e",
+  storageBucket: "crm-app-2733e.firebasestorage.app",
+  messagingSenderId: "568414527432",
+  appId: "1:568414527432:web:74f627531f718a48efeafd"
+};
+
+export const app = initializeApp(firebaseConfig);
+export const auth = getAuth(app);
+export const db = getFirestore(app);
+```
+
+Activer **offline persistence** (dans `db.js`) :
+
+```js
+import { db } from "./firebase.js";
+import { enableIndexedDbPersistence } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js";
+
+export async function enableOffline() {
+  try {
+    await enableIndexedDbPersistence(db);
+  } catch (e) {
+    // multi-tab peut bloquer la persistence
+    console.warn("Offline persistence not enabled:", e);
+  }
+}
+```
+
+---
+
+## 9) Déploiement GitHub Pages (simple)
+
+* repo GitHub public
+* branch `main`
+* Settings → Pages → deploy from branch → `/root`
+* Si Vite n’est pas utilisé : aucun build nécessaire (statique direct)
+
+---
+
+## 10) Priorités de dev (ordre simple)
+
+1. Auth Firebase (login/logout + session)
+2. CRUD clients/deals/events (liste + drawer)
+3. Kanban (boards/lists/cards + drag&drop)
+4. Checklist items
+5. Offline persistence
+6. Export/Import JSON
+7. Export ICS Outlook
+8. UI polish (minimaliste)
+
+---
+
+## 11) Résultat attendu
+
+* Un CRM simple, rapide, utilisable tous les jours
+* Kanban façon Trello = cœur du système
+* Données sécurisées par userId
+* Fonctionne hors-ligne (cache)
+* Backup local en JSON
+* Calendrier exportable dans Outlook
+
+---
+
+Si tu veux, je peux te donner **directement** :
+
+* un `index.html` + `styles.css` + `app.js` de base (squelette complet)
+* une implémentation Kanban HTML5 drag & drop (avec persistance `order` Firestore)
+* le générateur `.ics` prêt à l’emploi
