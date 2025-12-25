@@ -928,8 +928,8 @@
                 return;
             }
             try {
-                await createUserWithEmailAndPassword(auth, email, password);
-                await createDefaultBoard();
+                const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+                // Le board sera créé automatiquement lors de l'initialisation
             } catch (error) {
                 alert('Erreur lors de la création du compte: ' + error.message);
             }
@@ -960,54 +960,81 @@
             if (page === 'events') loadEvents();
         }
 
-        async function createDefaultBoard() {
+        async function createDefaultBoard(uid) {
             const defaultLists = ['À faire', 'En cours', 'En attente', 'Terminé'];
-            const boardRef = await addDoc(collection(db, 'boards'), {
-                ownerUid: currentUser.uid,
-                name: 'Board principal',
-                eventId: null,
-                createdAt: new Date()
-            });
-
-            for (let i = 0; i < defaultLists.length; i++) {
-                await addDoc(collection(db, 'lists'), {
-                    ownerUid: currentUser.uid,
-                    boardId: boardRef.id,
-                    title: defaultLists[i],
-                    order: i
+            
+            try {
+                const boardRef = await addDoc(collection(db, 'boards'), {
+                    ownerUid: uid,
+                    name: 'Board principal',
+                    eventId: null,
+                    createdAt: new Date()
                 });
+
+                for (let i = 0; i < defaultLists.length; i++) {
+                    await addDoc(collection(db, 'lists'), {
+                        ownerUid: uid,
+                        boardId: boardRef.id,
+                        title: defaultLists[i],
+                        order: i
+                    });
+                }
+                
+                console.log('Board par défaut créé avec succès');
+            } catch (error) {
+                console.error('Erreur création board:', error);
             }
         }
 
         async function initializeApp() {
-            await loadAllData();
-            updateDashboard();
+            try {
+                await loadAllData();
+                
+                // Si aucune liste n'existe, créer le board par défaut
+                if (lists.length === 0) {
+                    console.log('Aucun board trouvé, création du board par défaut...');
+                    await createDefaultBoard(currentUser.uid);
+                    await loadAllData(); // Recharger après création
+                }
+                
+                updateDashboard();
+            } catch (error) {
+                console.error('Erreur initialisation:', error);
+                alert('Erreur lors du chargement des données. Veuillez rafraîchir la page.');
+            }
         }
 
         async function loadAllData() {
             const uid = currentUser.uid;
             
-            // Load clients
-            const clientsSnapshot = await getDocs(query(collection(db, 'clients'), where('ownerUid', '==', uid)));
-            clients = clientsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-            
-            // Load deals
-            const dealsSnapshot = await getDocs(query(collection(db, 'deals'), where('ownerUid', '==', uid)));
-            deals = dealsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-            
-            // Load events
-            const eventsSnapshot = await getDocs(query(collection(db, 'events'), where('ownerUid', '==', uid)));
-            events = eventsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-            
-            // Load cards
-            const cardsSnapshot = await getDocs(query(collection(db, 'cards'), where('ownerUid', '==', uid)));
-            cards = cardsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-            
-            // Load lists
-            const listsSnapshot = await getDocs(query(collection(db, 'lists'), where('ownerUid', '==', uid), orderBy('order')));
-            lists = listsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+            try {
+                // Load clients
+                const clientsSnapshot = await getDocs(query(collection(db, 'clients'), where('ownerUid', '==', uid)));
+                clients = clientsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                
+                // Load deals
+                const dealsSnapshot = await getDocs(query(collection(db, 'deals'), where('ownerUid', '==', uid)));
+                deals = dealsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                
+                // Load events
+                const eventsSnapshot = await getDocs(query(collection(db, 'events'), where('ownerUid', '==', uid)));
+                events = eventsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                
+                // Load cards
+                const cardsSnapshot = await getDocs(query(collection(db, 'cards'), where('ownerUid', '==', uid)));
+                cards = cardsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                
+                // Load lists
+                const listsSnapshot = await getDocs(query(collection(db, 'lists'), where('ownerUid', '==', uid), orderBy('order')));
+                lists = listsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
 
-            updateDropdowns();
+                updateDropdowns();
+                
+                console.log('Données chargées:', { clients: clients.length, deals: deals.length, events: events.length, cards: cards.length, lists: lists.length });
+            } catch (error) {
+                console.error('Erreur lors du chargement des données:', error);
+                throw error;
+            }
         }
 
         function updateDashboard() {
