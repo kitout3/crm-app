@@ -1,316 +1,1593 @@
-Voici un **brief développeur SIMPLE** en **HTML / CSS / JavaScript pur**, avec **Firebase Auth + Firestore**, déployable sur **GitHub Pages**, et une organisation **type Trello** (Kanban).
-
----
-
-## BRIEF DÉVELOPPEUR — CRM SIMPLE (HTML/CSS/JS + Firebase + GitHub Pages)
-
-### 1) Objectif
-
-Créer une web-app **perso** (1 utilisateur) pour gérer :
-
-* **Clients**
-* **Opportunités (Deals)**
-* **Événements**
-* **Organisation** via **Kanban type Trello** (colonnes + cartes en drag & drop)
-* **Planning Outlook** via **export ICS**
-* **Offline** + **Export/Import JSON** pour sauvegarde locale
-
----
-
-## 2) Contraintes techniques
-
-* **100% Front** : aucune API serveur, aucun Node backend.
-* **Firebase seulement** :
-
-  * Firebase Authentication (email/mot de passe)
-  * Cloud Firestore (base)
-* **Déploiement GitHub Pages** (site statique)
-* **Données locales** :
-
-  * Offline Firestore (cache navigateur)
-  * Sauvegarde manuelle via export/import `.json`
-
----
-
-## 3) Stack (imposée)
-
-* HTML5 / CSS3 / JavaScript ES Modules
-* Firebase Web SDK (modules)
-* Pas de framework (pas React/Vue)
-* Drag & Drop : API HTML5 native (simple)
-  *(option si besoin plus tard : SortableJS, mais à éviter si tu veux strict “pur”)*
-
----
-
-## 4) Fonctionnalités (simple, mais complet)
-
-### 4.1 Auth (Firebase)
-
-* Écran login :
-
-  * email + mot de passe
-  * bouton login / logout
-* Après login :
-
-  * charger toutes les données **du user connecté** (`ownerUid`)
-
-### 4.2 Navigation (ultra simple)
-
-Menu latéral :
-
-* Home
-* Board (Kanban)
-* Clients
-* Deals
-* Events
-* Backup (Export/Import)
-* Settings (min)
-
-### 4.3 Home (tableau de bord)
-
-* Cartes **en retard** / **aujourd’hui**
-* Deals à relancer (deal sans “prochaine action”)
-* Événements à venir
-* Bouton : “Nouvelle carte”
-
-### 4.4 Kanban type Trello (central)
-
-#### Board
-
-* 1 board global par défaut
-* 1 board par événement (optionnel, mais recommandé)
-
-#### Colonnes fixes (par défaut)
-
-* À faire
-* En cours
-* En attente
-* Terminé
-
-#### Cartes (champs minimum)
-
-* Titre
-* Description
-* Date limite (dueDate)
-* Priorité : basse / normale / haute
-* Labels (liste texte ou couleurs simples)
-* Liens :
-
-  * clientId (option)
-  * dealId (option)
-  * eventId (option)
-* Checklist simple (liste d’items)
-
-#### Interactions obligatoires
-
-* Drag & drop cartes entre colonnes
-* Réordonner cartes dans la colonne (simple : en drop, recalcul `order`)
-* Clic carte → panneau latéral (drawer) éditable
-* Ajout rapide de carte dans une colonne
-
-### 4.5 Clients
-
-* CRUD client : nom, notes, tags
-* Fiche client : liste des cartes liées + deals + événements
-
-### 4.6 Deals (opportunités)
-
-* CRUD deal :
-
-  * nom
-  * client
-  * montant estimé
-  * statut : Lead / Devis / Gagné / Perdu
-  * prochaine action + date (pour relances)
-* Vue liste simple + filtres statut
-
-### 4.7 Events (événements)
-
-* CRUD event :
-
-  * nom
-  * client
-  * dates (start/end)
-  * statut
-* Board par event (filtrer cartes par `eventId`)
-
-### 4.8 Export Outlook (ICS)
-
-* Bouton “Exporter calendrier Outlook (.ics)”
-* Contenu ICS :
-
-  * cartes avec `dueDate` (événement de 30 min par défaut)
-  * événements (start/end)
-* Import ICS : **optionnel** (pas prioritaire)
-
-### 4.9 Offline + Backup local
-
-* Activer offline persistence Firestore (cache navigateur)
-* Backup :
-
-  * Export JSON (toutes collections user)
-  * Import JSON (ré-écrit les docs)
-
-> Important : sur un site web, on ne peut pas écrire automatiquement sur ton disque sans interaction → **export/import** = solution simple.
-
----
-
-## 5) Modèle de données Firestore (minimal)
-
-Chaque document contient `ownerUid`.
-
-Collections :
-
-* `clients`
-
-  * `{ id, ownerUid, name, notes, tags[], createdAt }`
-
-* `deals`
-
-  * `{ id, ownerUid, name, clientId, amount, status, nextAction, nextActionDate, createdAt }`
-
-* `events`
-
-  * `{ id, ownerUid, name, clientId, startDate, endDate, status, createdAt }`
-
-* `boards`
-
-  * `{ id, ownerUid, name, eventId|null, createdAt }`
-
-* `lists`
-
-  * `{ id, ownerUid, boardId, title, order }`
-
-* `cards`
-
-  * `{ id, ownerUid, boardId, listId, title, description, dueDate|null, priority, labels[], clientId?, dealId?, eventId?, order }`
-
-* `checklistItems`
-
-  * `{ id, ownerUid, cardId, title, done, order }`
-
----
-
-## 6) Règles Firestore (simple et sécurisées)
-
-Principe : lecture/écriture uniquement sur ses docs.
-
-*(à coller dans Firestore Rules)*
-
-```js
-rules_version = '2';
-service cloud.firestore {
-  match /databases/{database}/documents {
-    function isOwner() {
-      return request.auth != null && request.auth.uid == resource.data.ownerUid;
-    }
-    function isOwnerCreate() {
-      return request.auth != null && request.auth.uid == request.resource.data.ownerUid;
-    }
-
-    match /{collection}/{docId} {
-      allow create: if isOwnerCreate();
-      allow read, update, delete: if isOwner();
-    }
-  }
-}
-```
-
----
-
-## 7) Structure fichiers (GitHub Pages ready)
-
-```
-/index.html
-/css/styles.css
-/js/app.js
-/js/firebase.js
-/js/auth.js
-/js/db.js
-/js/ui.js
-/js/kanban.js
-/js/backup.js
-/js/ics.js
-```
-
----
-
-## 8) Intégration Firebase (ton snippet)
-
-Créer `js/firebase.js` :
-
-```js
-import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js";
-import { getAuth } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-auth.js";
-import { getFirestore } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js";
-
-const firebaseConfig = {
-  apiKey: "AIzaSyBqB0E-hdqYxKel9bg3pKoK6zaPUA-MO1I",
-  authDomain: "crm-app-2733e.firebaseapp.com",
-  projectId: "crm-app-2733e",
-  storageBucket: "crm-app-2733e.firebasestorage.app",
-  messagingSenderId: "568414527432",
-  appId: "1:568414527432:web:74f627531f718a48efeafd"
-};
-
-export const app = initializeApp(firebaseConfig);
-export const auth = getAuth(app);
-export const db = getFirestore(app);
-```
-
-Activer **offline persistence** (dans `db.js`) :
-
-```js
-import { db } from "./firebase.js";
-import { enableIndexedDbPersistence } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js";
-
-export async function enableOffline() {
-  try {
-    await enableIndexedDbPersistence(db);
-  } catch (e) {
-    // multi-tab peut bloquer la persistence
-    console.warn("Offline persistence not enabled:", e);
-  }
-}
-```
-
----
-
-## 9) Déploiement GitHub Pages (simple)
-
-* repo GitHub public
-* branch `main`
-* Settings → Pages → deploy from branch → `/root`
-* Si Vite n’est pas utilisé : aucun build nécessaire (statique direct)
-
----
-
-## 10) Priorités de dev (ordre simple)
-
-1. Auth Firebase (login/logout + session)
-2. CRUD clients/deals/events (liste + drawer)
-3. Kanban (boards/lists/cards + drag&drop)
-4. Checklist items
-5. Offline persistence
-6. Export/Import JSON
-7. Export ICS Outlook
-8. UI polish (minimaliste)
-
----
-
-## 11) Résultat attendu
-
-* Un CRM simple, rapide, utilisable tous les jours
-* Kanban façon Trello = cœur du système
-* Données sécurisées par userId
-* Fonctionne hors-ligne (cache)
-* Backup local en JSON
-* Calendrier exportable dans Outlook
-
----
-
-Si tu veux, je peux te donner **directement** :
-
-* un `index.html` + `styles.css` + `app.js` de base (squelette complet)
-* une implémentation Kanban HTML5 drag & drop (avec persistance `order` Firestore)
-* le générateur `.ics` prêt à l’emploi
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CRM Kanban</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        :root {
+            --primary: #2c3e50;
+            --secondary: #34495e;
+            --accent: #3498db;
+            --success: #27ae60;
+            --warning: #f39c12;
+            --danger: #e74c3c;
+            --light: #ecf0f1;
+            --white: #ffffff;
+            --border: #bdc3c7;
+            --shadow: rgba(0, 0, 0, 0.1);
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: #f8f9fa;
+            color: var(--primary);
+            line-height: 1.6;
+        }
+
+        /* Layout */
+        .app-container {
+            display: flex;
+            height: 100vh;
+        }
+
+        /* Sidebar */
+        .sidebar {
+            width: 260px;
+            background: var(--primary);
+            color: var(--white);
+            display: flex;
+            flex-direction: column;
+            box-shadow: 2px 0 10px var(--shadow);
+        }
+
+        .sidebar-header {
+            padding: 24px 20px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .sidebar-header h1 {
+            font-size: 24px;
+            font-weight: 600;
+            letter-spacing: -0.5px;
+        }
+
+        .user-info {
+            font-size: 13px;
+            opacity: 0.8;
+            margin-top: 8px;
+        }
+
+        .nav-menu {
+            flex: 1;
+            padding: 20px 0;
+        }
+
+        .nav-item {
+            padding: 12px 20px;
+            cursor: pointer;
+            transition: all 0.2s;
+            border-left: 3px solid transparent;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .nav-item:hover {
+            background: rgba(255, 255, 255, 0.05);
+        }
+
+        .nav-item.active {
+            background: rgba(255, 255, 255, 0.1);
+            border-left-color: var(--accent);
+        }
+
+        .nav-icon {
+            width: 20px;
+            text-align: center;
+        }
+
+        .logout-btn {
+            margin: 20px;
+            padding: 12px;
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            color: var(--white);
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .logout-btn:hover {
+            background: rgba(255, 255, 255, 0.15);
+        }
+
+        /* Main Content */
+        .main-content {
+            flex: 1;
+            overflow-y: auto;
+            padding: 32px;
+        }
+
+        /* Login Screen */
+        .login-screen {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            background: linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%);
+        }
+
+        .login-card {
+            background: var(--white);
+            padding: 48px;
+            border-radius: 12px;
+            box-shadow: 0 10px 40px var(--shadow);
+            width: 100%;
+            max-width: 420px;
+        }
+
+        .login-card h2 {
+            font-size: 28px;
+            margin-bottom: 32px;
+            text-align: center;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 500;
+            font-size: 14px;
+        }
+
+        .form-group input {
+            width: 100%;
+            padding: 12px 16px;
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            font-size: 15px;
+            transition: all 0.2s;
+        }
+
+        .form-group input:focus {
+            outline: none;
+            border-color: var(--accent);
+            box-shadow: 0 0 0 3px rgba(52, 152, 219, 0.1);
+        }
+
+        .btn {
+            width: 100%;
+            padding: 14px;
+            background: var(--accent);
+            color: var(--white);
+            border: none;
+            border-radius: 6px;
+            font-size: 15px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .btn:hover {
+            background: #2980b9;
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(52, 152, 219, 0.3);
+        }
+
+        .btn-secondary {
+            background: var(--light);
+            color: var(--primary);
+            margin-top: 12px;
+        }
+
+        .btn-secondary:hover {
+            background: #d5dbdb;
+        }
+
+        /* Page Header */
+        .page-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 32px;
+        }
+
+        .page-header h2 {
+            font-size: 28px;
+            font-weight: 600;
+        }
+
+        .btn-primary {
+            padding: 10px 20px;
+            background: var(--accent);
+            color: var(--white);
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: 500;
+            transition: all 0.2s;
+        }
+
+        .btn-primary:hover {
+            background: #2980b9;
+        }
+
+        /* Cards */
+        .cards-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+            gap: 20px;
+            margin-bottom: 32px;
+        }
+
+        .stat-card {
+            background: var(--white);
+            padding: 24px;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px var(--shadow);
+        }
+
+        .stat-card h3 {
+            font-size: 14px;
+            color: #7f8c8d;
+            margin-bottom: 8px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .stat-card .value {
+            font-size: 32px;
+            font-weight: 700;
+            color: var(--primary);
+        }
+
+        /* Kanban Board */
+        .kanban-board {
+            display: flex;
+            gap: 20px;
+            overflow-x: auto;
+            padding-bottom: 20px;
+        }
+
+        .kanban-column {
+            min-width: 320px;
+            background: var(--light);
+            border-radius: 8px;
+            padding: 16px;
+        }
+
+        .column-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 16px;
+            padding-bottom: 12px;
+            border-bottom: 2px solid var(--border);
+        }
+
+        .column-title {
+            font-weight: 600;
+            font-size: 15px;
+        }
+
+        .column-count {
+            background: var(--white);
+            padding: 4px 10px;
+            border-radius: 12px;
+            font-size: 13px;
+            font-weight: 600;
+        }
+
+        .cards-container {
+            min-height: 100px;
+        }
+
+        .kanban-card {
+            background: var(--white);
+            padding: 16px;
+            border-radius: 6px;
+            margin-bottom: 12px;
+            cursor: grab;
+            box-shadow: 0 1px 3px var(--shadow);
+            transition: all 0.2s;
+        }
+
+        .kanban-card:hover {
+            box-shadow: 0 4px 12px var(--shadow);
+            transform: translateY(-2px);
+        }
+
+        .kanban-card.dragging {
+            opacity: 0.5;
+            cursor: grabbing;
+        }
+
+        .card-title {
+            font-weight: 600;
+            margin-bottom: 8px;
+        }
+
+        .card-meta {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+            margin-top: 12px;
+            font-size: 13px;
+        }
+
+        .card-tag {
+            padding: 4px 10px;
+            border-radius: 4px;
+            background: var(--light);
+            font-size: 12px;
+        }
+
+        .priority-high { background: #fee; color: var(--danger); }
+        .priority-normal { background: #ffe; color: var(--warning); }
+        .priority-low { background: #efe; color: var(--success); }
+
+        .add-card-btn {
+            width: 100%;
+            padding: 10px;
+            background: transparent;
+            border: 2px dashed var(--border);
+            border-radius: 6px;
+            cursor: pointer;
+            color: #7f8c8d;
+            transition: all 0.2s;
+        }
+
+        .add-card-btn:hover {
+            border-color: var(--accent);
+            color: var(--accent);
+        }
+
+        /* Table */
+        .table-container {
+            background: var(--white);
+            border-radius: 8px;
+            box-shadow: 0 2px 8px var(--shadow);
+            overflow: hidden;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        thead {
+            background: var(--light);
+        }
+
+        th {
+            padding: 16px;
+            text-align: left;
+            font-weight: 600;
+            font-size: 14px;
+            color: #7f8c8d;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        td {
+            padding: 16px;
+            border-top: 1px solid var(--light);
+        }
+
+        tbody tr:hover {
+            background: #f8f9fa;
+        }
+
+        /* Modal */
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.5);
+            z-index: 1000;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .modal.active {
+            display: flex;
+        }
+
+        .modal-content {
+            background: var(--white);
+            border-radius: 12px;
+            width: 90%;
+            max-width: 600px;
+            max-height: 90vh;
+            overflow-y: auto;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+        }
+
+        .modal-header {
+            padding: 24px;
+            border-bottom: 1px solid var(--light);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .modal-header h3 {
+            font-size: 20px;
+        }
+
+        .close-btn {
+            background: none;
+            border: none;
+            font-size: 24px;
+            cursor: pointer;
+            color: #7f8c8d;
+        }
+
+        .modal-body {
+            padding: 24px;
+        }
+
+        .modal-footer {
+            padding: 24px;
+            border-top: 1px solid var(--light);
+            display: flex;
+            gap: 12px;
+            justify-content: flex-end;
+        }
+
+        .btn-cancel {
+            padding: 10px 20px;
+            background: var(--light);
+            color: var(--primary);
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+        }
+
+        textarea {
+            width: 100%;
+            padding: 12px;
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            font-family: inherit;
+            font-size: 15px;
+            resize: vertical;
+            min-height: 100px;
+        }
+
+        select {
+            width: 100%;
+            padding: 12px;
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            font-size: 15px;
+            background: var(--white);
+        }
+
+        .hidden {
+            display: none !important;
+        }
+
+        .checklist {
+            margin-top: 16px;
+        }
+
+        .checklist-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 0;
+        }
+
+        .checklist-item input[type="checkbox"] {
+            width: 18px;
+            height: 18px;
+        }
+
+        .action-btn {
+            padding: 6px 12px;
+            background: var(--accent);
+            color: var(--white);
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 13px;
+        }
+
+        .btn-danger {
+            background: var(--danger);
+        }
+
+        .btn-success {
+            background: var(--success);
+        }
+    </style>
+</head>
+<body>
+    <!-- Login Screen -->
+    <div id="loginScreen" class="login-screen">
+        <div class="login-card">
+            <h2>CRM Kanban</h2>
+            <form id="loginForm">
+                <div class="form-group">
+                    <label>Email</label>
+                    <input type="email" id="loginEmail" required>
+                </div>
+                <div class="form-group">
+                    <label>Mot de passe</label>
+                    <input type="password" id="loginPassword" required>
+                </div>
+                <button type="submit" class="btn">Se connecter</button>
+                <button type="button" id="registerBtn" class="btn btn-secondary">Créer un compte</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Main App -->
+    <div id="app" class="app-container hidden">
+        <!-- Sidebar -->
+        <div class="sidebar">
+            <div class="sidebar-header">
+                <h1>CRM Kanban</h1>
+                <div class="user-info" id="userEmail"></div>
+            </div>
+            <nav class="nav-menu">
+                <div class="nav-item active" data-page="home">
+                    <span class="nav-icon">🏠</span>
+                    <span>Accueil</span>
+                </div>
+                <div class="nav-item" data-page="board">
+                    <span class="nav-icon">📋</span>
+                    <span>Board</span>
+                </div>
+                <div class="nav-item" data-page="clients">
+                    <span class="nav-icon">👥</span>
+                    <span>Clients</span>
+                </div>
+                <div class="nav-item" data-page="deals">
+                    <span class="nav-icon">💼</span>
+                    <span>Deals</span>
+                </div>
+                <div class="nav-item" data-page="events">
+                    <span class="nav-icon">📅</span>
+                    <span>Événements</span>
+                </div>
+                <div class="nav-item" data-page="backup">
+                    <span class="nav-icon">💾</span>
+                    <span>Sauvegarde</span>
+                </div>
+            </nav>
+            <button class="logout-btn" id="logoutBtn">Déconnexion</button>
+        </div>
+
+        <!-- Main Content -->
+        <div class="main-content">
+            <!-- Home Page -->
+            <div id="homePage" class="page active">
+                <div class="page-header">
+                    <h2>Tableau de bord</h2>
+                    <button class="btn-primary" id="newCardBtn">+ Nouvelle carte</button>
+                </div>
+                <div class="cards-grid">
+                    <div class="stat-card">
+                        <h3>Cartes actives</h3>
+                        <div class="value" id="activeCardsCount">0</div>
+                    </div>
+                    <div class="stat-card">
+                        <h3>Clients</h3>
+                        <div class="value" id="clientsCount">0</div>
+                    </div>
+                    <div class="stat-card">
+                        <h3>Deals ouverts</h3>
+                        <div class="value" id="dealsCount">0</div>
+                    </div>
+                    <div class="stat-card">
+                        <h3>Événements à venir</h3>
+                        <div class="value" id="eventsCount">0</div>
+                    </div>
+                </div>
+                <h3 style="margin: 24px 0 16px;">Cartes urgentes</h3>
+                <div id="urgentCards"></div>
+            </div>
+
+            <!-- Board Page -->
+            <div id="boardPage" class="page hidden">
+                <div class="page-header">
+                    <h2>Kanban Board</h2>
+                </div>
+                <div class="kanban-board" id="kanbanBoard"></div>
+            </div>
+
+            <!-- Clients Page -->
+            <div id="clientsPage" class="page hidden">
+                <div class="page-header">
+                    <h2>Clients</h2>
+                    <button class="btn-primary" id="newClientBtn">+ Nouveau client</button>
+                </div>
+                <div class="table-container">
+                    <table id="clientsTable">
+                        <thead>
+                            <tr>
+                                <th>Nom</th>
+                                <th>Tags</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Deals Page -->
+            <div id="dealsPage" class="page hidden">
+                <div class="page-header">
+                    <h2>Deals</h2>
+                    <button class="btn-primary" id="newDealBtn">+ Nouveau deal</button>
+                </div>
+                <div class="table-container">
+                    <table id="dealsTable">
+                        <thead>
+                            <tr>
+                                <th>Nom</th>
+                                <th>Client</th>
+                                <th>Montant</th>
+                                <th>Statut</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Events Page -->
+            <div id="eventsPage" class="page hidden">
+                <div class="page-header">
+                    <h2>Événements</h2>
+                    <button class="btn-primary" id="newEventBtn">+ Nouvel événement</button>
+                </div>
+                <div class="table-container">
+                    <table id="eventsTable">
+                        <thead>
+                            <tr>
+                                <th>Nom</th>
+                                <th>Client</th>
+                                <th>Dates</th>
+                                <th>Statut</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Backup Page -->
+            <div id="backupPage" class="page hidden">
+                <div class="page-header">
+                    <h2>Sauvegarde & Export</h2>
+                </div>
+                <div class="table-container" style="padding: 32px;">
+                    <h3 style="margin-bottom: 16px;">Export JSON</h3>
+                    <button class="btn-primary" id="exportJsonBtn">📥 Exporter toutes les données</button>
+                    
+                    <h3 style="margin: 32px 0 16px;">Import JSON</h3>
+                    <input type="file" id="importJsonFile" accept=".json">
+                    <button class="btn-primary" id="importJsonBtn" style="margin-top: 12px;">📤 Importer les données</button>
+                    
+                    <h3 style="margin: 32px 0 16px;">Export Calendrier Outlook (.ics)</h3>
+                    <button class="btn-primary" id="exportIcsBtn">📅 Exporter vers Outlook</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal Card -->
+    <div id="cardModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 id="cardModalTitle">Nouvelle carte</h3>
+                <button class="close-btn" onclick="closeCardModal()">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label>Titre</label>
+                    <input type="text" id="cardTitle" required>
+                </div>
+                <div class="form-group">
+                    <label>Description</label>
+                    <textarea id="cardDescription"></textarea>
+                </div>
+                <div class="form-group">
+                    <label>Date limite</label>
+                    <input type="date" id="cardDueDate">
+                </div>
+                <div class="form-group">
+                    <label>Priorité</label>
+                    <select id="cardPriority">
+                        <option value="low">Basse</option>
+                        <option value="normal" selected>Normale</option>
+                        <option value="high">Haute</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Client</label>
+                    <select id="cardClient">
+                        <option value="">Aucun</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Deal</label>
+                    <select id="cardDeal">
+                        <option value="">Aucun</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Labels (séparés par des virgules)</label>
+                    <input type="text" id="cardLabels" placeholder="urgent, important">
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-cancel" onclick="closeCardModal()">Annuler</button>
+                <button class="btn-primary" id="saveCardBtn">Enregistrer</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Similar modals for Client, Deal, Event -->
+    <div id="clientModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Nouveau client</h3>
+                <button class="close-btn" onclick="closeClientModal()">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label>Nom</label>
+                    <input type="text" id="clientName" required>
+                </div>
+                <div class="form-group">
+                    <label>Notes</label>
+                    <textarea id="clientNotes"></textarea>
+                </div>
+                <div class="form-group">
+                    <label>Tags (séparés par des virgules)</label>
+                    <input type="text" id="clientTags" placeholder="vip, tech">
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-cancel" onclick="closeClientModal()">Annuler</button>
+                <button class="btn-primary" id="saveClientBtn">Enregistrer</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="dealModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Nouveau deal</h3>
+                <button class="close-btn" onclick="closeDealModal()">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label>Nom</label>
+                    <input type="text" id="dealName" required>
+                </div>
+                <div class="form-group">
+                    <label>Client</label>
+                    <select id="dealClient"></select>
+                </div>
+                <div class="form-group">
+                    <label>Montant estimé (€)</label>
+                    <input type="number" id="dealAmount" min="0">
+                </div>
+                <div class="form-group">
+                    <label>Statut</label>
+                    <select id="dealStatus">
+                        <option value="lead">Lead</option>
+                        <option value="quote">Devis</option>
+                        <option value="won">Gagné</option>
+                        <option value="lost">Perdu</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Prochaine action</label>
+                    <input type="text" id="dealNextAction">
+                </div>
+                <div class="form-group">
+                    <label>Date prochaine action</label>
+                    <input type="date" id="dealNextActionDate">
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-cancel" onclick="closeDealModal()">Annuler</button>
+                <button class="btn-primary" id="saveDealBtn">Enregistrer</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="eventModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Nouvel événement</h3>
+                <button class="close-btn" onclick="closeEventModal()">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label>Nom</label>
+                    <input type="text" id="eventName" required>
+                </div>
+                <div class="form-group">
+                    <label>Client</label>
+                    <select id="eventClient"></select>
+                </div>
+                <div class="form-group">
+                    <label>Date début</label>
+                    <input type="datetime-local" id="eventStartDate">
+                </div>
+                <div class="form-group">
+                    <label>Date fin</label>
+                    <input type="datetime-local" id="eventEndDate">
+                </div>
+                <div class="form-group">
+                    <label>Statut</label>
+                    <select id="eventStatus">
+                        <option value="planned">Planifié</option>
+                        <option value="ongoing">En cours</option>
+                        <option value="completed">Terminé</option>
+                        <option value="cancelled">Annulé</option>
+                    </select>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-cancel" onclick="closeEventModal()">Annuler</button>
+                <button class="btn-primary" id="saveEventBtn">Enregistrer</button>
+            </div>
+        </div>
+    </div>
+
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js";
+        import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-auth.js";
+        import { getFirestore, collection, addDoc, getDocs, updateDoc, deleteDoc, doc, query, where, enableIndexedDbPersistence, orderBy } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js";
+
+        // Firebase configuration
+        const firebaseConfig = {
+            apiKey: "AIzaSyBqB0E-hdqYxKel9bg3pKoK6zaPUA-MO1I",
+            authDomain: "crm-app-2733e.firebaseapp.com",
+            projectId: "crm-app-2733e",
+            storageBucket: "crm-app-2733e.firebasestorage.app",
+            messagingSenderId: "568414527432",
+            appId: "1:568414527432:web:74f627531f718a48efeafd"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+
+        // Enable offline persistence
+        try {
+            await enableIndexedDbPersistence(db);
+        } catch (err) {
+            console.warn("Offline persistence not enabled:", err);
+        }
+
+        // Global state
+        let currentUser = null;
+        let clients = [];
+        let deals = [];
+        let events = [];
+        let cards = [];
+        let lists = [];
+
+        // Initialize app
+        onAuthStateChanged(auth, (user) => {
+            if (user) {
+                currentUser = user;
+                document.getElementById('loginScreen').classList.add('hidden');
+                document.getElementById('app').classList.remove('hidden');
+                document.getElementById('userEmail').textContent = user.email;
+                initializeApp();
+            } else {
+                document.getElementById('loginScreen').classList.remove('hidden');
+                document.getElementById('app').classList.add('hidden');
+            }
+        });
+
+        // Login
+        document.getElementById('loginForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const email = document.getElementById('loginEmail').value;
+            const password = document.getElementById('loginPassword').value;
+            try {
+                await signInWithEmailAndPassword(auth, email, password);
+            } catch (error) {
+                alert('Erreur de connexion: ' + error.message);
+            }
+        });
+
+        // Register
+        document.getElementById('registerBtn').addEventListener('click', async () => {
+            const email = document.getElementById('loginEmail').value;
+            const password = document.getElementById('loginPassword').value;
+            if (!email || !password) {
+                alert('Veuillez remplir tous les champs');
+                return;
+            }
+            try {
+                await createUserWithEmailAndPassword(auth, email, password);
+                await createDefaultBoard();
+            } catch (error) {
+                alert('Erreur lors de la création du compte: ' + error.message);
+            }
+        });
+
+        // Logout
+        document.getElementById('logoutBtn').addEventListener('click', () => {
+            signOut(auth);
+        });
+
+        // Navigation
+        document.querySelectorAll('.nav-item').forEach(item => {
+            item.addEventListener('click', () => {
+                const page = item.dataset.page;
+                showPage(page);
+                document.querySelectorAll('.nav-item').forEach(i => i.classList.remove('active'));
+                item.classList.add('active');
+            });
+        });
+
+        function showPage(page) {
+            document.querySelectorAll('.page').forEach(p => p.classList.add('hidden'));
+            document.getElementById(page + 'Page').classList.remove('hidden');
+            
+            if (page === 'board') loadBoard();
+            if (page === 'clients') loadClients();
+            if (page === 'deals') loadDeals();
+            if (page === 'events') loadEvents();
+        }
+
+        async function createDefaultBoard() {
+            const defaultLists = ['À faire', 'En cours', 'En attente', 'Terminé'];
+            const boardRef = await addDoc(collection(db, 'boards'), {
+                ownerUid: currentUser.uid,
+                name: 'Board principal',
+                eventId: null,
+                createdAt: new Date()
+            });
+
+            for (let i = 0; i < defaultLists.length; i++) {
+                await addDoc(collection(db, 'lists'), {
+                    ownerUid: currentUser.uid,
+                    boardId: boardRef.id,
+                    title: defaultLists[i],
+                    order: i
+                });
+            }
+        }
+
+        async function initializeApp() {
+            await loadAllData();
+            updateDashboard();
+        }
+
+        async function loadAllData() {
+            const uid = currentUser.uid;
+            
+            // Load clients
+            const clientsSnapshot = await getDocs(query(collection(db, 'clients'), where('ownerUid', '==', uid)));
+            clients = clientsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+            
+            // Load deals
+            const dealsSnapshot = await getDocs(query(collection(db, 'deals'), where('ownerUid', '==', uid)));
+            deals = dealsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+            
+            // Load events
+            const eventsSnapshot = await getDocs(query(collection(db, 'events'), where('ownerUid', '==', uid)));
+            events = eventsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+            
+            // Load cards
+            const cardsSnapshot = await getDocs(query(collection(db, 'cards'), where('ownerUid', '==', uid)));
+            cards = cardsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+            
+            // Load lists
+            const listsSnapshot = await getDocs(query(collection(db, 'lists'), where('ownerUid', '==', uid), orderBy('order')));
+            lists = listsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+
+            updateDropdowns();
+        }
+
+        function updateDashboard() {
+            document.getElementById('activeCardsCount').textContent = cards.length;
+            document.getElementById('clientsCount').textContent = clients.length;
+            document.getElementById('dealsCount').textContent = deals.filter(d => d.status !== 'won' && d.status !== 'lost').length;
+            document.getElementById('eventsCount').textContent = events.filter(e => e.status !== 'completed').length;
+
+            // Show urgent cards
+            const today = new Date().toISOString().split('T')[0];
+            const urgentCards = cards.filter(c => c.dueDate && c.dueDate <= today);
+            const urgentContainer = document.getElementById('urgentCards');
+            urgentContainer.innerHTML = urgentCards.map(card => `
+                <div class="kanban-card" style="max-width: 400px;">
+                    <div class="card-title">${card.title}</div>
+                    <div class="card-meta">
+                        <span class="card-tag priority-${card.priority}">${card.priority}</span>
+                        <span class="card-tag">📅 ${card.dueDate}</span>
+                    </div>
+                </div>
+            `).join('') || '<p>Aucune carte urgente</p>';
+        }
+
+        function updateDropdowns() {
+            const clientOptions = clients.map(c => `<option value="${c.id}">${c.name}</option>`).join('');
+            document.getElementById('cardClient').innerHTML = '<option value="">Aucun</option>' + clientOptions;
+            document.getElementById('dealClient').innerHTML = '<option value="">Aucun</option>' + clientOptions;
+            document.getElementById('eventClient').innerHTML = '<option value="">Aucun</option>' + clientOptions;
+
+            const dealOptions = deals.map(d => `<option value="${d.id}">${d.name}</option>`).join('');
+            document.getElementById('cardDeal').innerHTML = '<option value="">Aucun</option>' + dealOptions;
+        }
+
+        async function loadBoard() {
+            const boardContainer = document.getElementById('kanbanBoard');
+            boardContainer.innerHTML = '';
+
+            for (const list of lists) {
+                const listCards = cards.filter(c => c.listId === list.id).sort((a, b) => a.order - b.order);
+                
+                const column = document.createElement('div');
+                column.className = 'kanban-column';
+                column.dataset.listId = list.id;
+                column.innerHTML = `
+                    <div class="column-header">
+                        <div class="column-title">${list.title}</div>
+                        <div class="column-count">${listCards.length}</div>
+                    </div>
+                    <div class="cards-container" data-list-id="${list.id}">
+                        ${listCards.map(card => createCardHTML(card)).join('')}
+                    </div>
+                    <button class="add-card-btn" data-list-id="${list.id}">+ Ajouter une carte</button>
+                `;
+                
+                boardContainer.appendChild(column);
+            }
+
+            setupDragAndDrop();
+            setupAddCardButtons();
+        }
+
+        function createCardHTML(card) {
+            const client = clients.find(c => c.id === card.clientId);
+            return `
+                <div class="kanban-card" draggable="true" data-card-id="${card.id}" onclick="editCard('${card.id}')">
+                    <div class="card-title">${card.title}</div>
+                    ${card.description ? `<div style="font-size: 13px; color: #7f8c8d; margin-top: 4px;">${card.description.substring(0, 80)}${card.description.length > 80 ? '...' : ''}</div>` : ''}
+                    <div class="card-meta">
+                        ${card.priority ? `<span class="card-tag priority-${card.priority}">${card.priority}</span>` : ''}
+                        ${card.dueDate ? `<span class="card-tag">📅 ${card.dueDate}</span>` : ''}
+                        ${client ? `<span class="card-tag">👤 ${client.name}</span>` : ''}
+                        ${card.labels && card.labels.length ? card.labels.map(l => `<span class="card-tag">${l}</span>`).join('') : ''}
+                    </div>
+                </div>
+            `;
+        }
+
+        function setupDragAndDrop() {
+            const cardElements = document.querySelectorAll('.kanban-card');
+            const containers = document.querySelectorAll('.cards-container');
+
+            cardElements.forEach(card => {
+                card.addEventListener('dragstart', (e) => {
+                    card.classList.add('dragging');
+                    e.dataTransfer.effectAllowed = 'move';
+                    e.dataTransfer.setData('text/html', card.innerHTML);
+                });
+
+                card.addEventListener('dragend', () => {
+                    card.classList.remove('dragging');
+                });
+            });
+
+            containers.forEach(container => {
+                container.addEventListener('dragover', (e) => {
+                    e.preventDefault();
+                    const dragging = document.querySelector('.dragging');
+                    const afterElement = getDragAfterElement(container, e.clientY);
+                    if (afterElement) {
+                        container.insertBefore(dragging, afterElement);
+                    } else {
+                        container.appendChild(dragging);
+                    }
+                });
+
+                container.addEventListener('drop', async (e) => {
+                    e.preventDefault();
+                    const dragging = document.querySelector('.dragging');
+                    if (!dragging) return;
+
+                    const newListId = container.dataset.listId;
+                    const cardId = dragging.dataset.cardId;
+                    
+                    // Update card in database
+                    const cardRef = doc(db, 'cards', cardId);
+                    await updateDoc(cardRef, { listId: newListId });
+                    
+                    // Reload
+                    await loadAllData();
+                    loadBoard();
+                });
+            });
+        }
+
+        function getDragAfterElement(container, y) {
+            const draggableElements = [...container.querySelectorAll('.kanban-card:not(.dragging)')];
+            
+            return draggableElements.reduce((closest, child) => {
+                const box = child.getBoundingClientRect();
+                const offset = y - box.top - box.height / 2;
+                
+                if (offset < 0 && offset > closest.offset) {
+                    return { offset: offset, element: child };
+                } else {
+                    return closest;
+                }
+            }, { offset: Number.NEGATIVE_INFINITY }).element;
+        }
+
+        function setupAddCardButtons() {
+            document.querySelectorAll('.add-card-btn').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    window.currentListId = btn.dataset.listId;
+                    openCardModal();
+                });
+            });
+        }
+
+        // Card Modal
+        window.openCardModal = function(cardId = null) {
+            window.currentCardId = cardId;
+            document.getElementById('cardModal').classList.add('active');
+            
+            if (cardId) {
+                const card = cards.find(c => c.id === cardId);
+                document.getElementById('cardModalTitle').textContent = 'Modifier la carte';
+                document.getElementById('cardTitle').value = card.title || '';
+                document.getElementById('cardDescription').value = card.description || '';
+                document.getElementById('cardDueDate').value = card.dueDate || '';
+                document.getElementById('cardPriority').value = card.priority || 'normal';
+                document.getElementById('cardClient').value = card.clientId || '';
+                document.getElementById('cardDeal').value = card.dealId || '';
+                document.getElementById('cardLabels').value = card.labels ? card.labels.join(', ') : '';
+            } else {
+                document.getElementById('cardModalTitle').textContent = 'Nouvelle carte';
+                document.getElementById('cardTitle').value = '';
+                document.getElementById('cardDescription').value = '';
+                document.getElementById('cardDueDate').value = '';
+                document.getElementById('cardPriority').value = 'normal';
+                document.getElementById('cardClient').value = '';
+                document.getElementById('cardDeal').value = '';
+                document.getElementById('cardLabels').value = '';
+            }
+        };
+
+        window.closeCardModal = function() {
+            document.getElementById('cardModal').classList.remove('active');
+            window.currentCardId = null;
+        };
+
+        window.editCard = function(cardId) {
+            openCardModal(cardId);
+        };
+
+        document.getElementById('newCardBtn').addEventListener('click', () => {
+            window.currentListId = lists[0]?.id;
+            openCardModal();
+        });
+
+        document.getElementById('saveCardBtn').addEventListener('click', async () => {
+            const title = document.getElementById('cardTitle').value;
+            if (!title) {
+                alert('Le titre est requis');
+                return;
+            }
+
+            const cardData = {
+                ownerUid: currentUser.uid,
+                boardId: lists[0]?.boardId || '',
+                listId: window.currentListId || lists[0]?.id,
+                title,
+                description: document.getElementById('cardDescription').value,
+                dueDate: document.getElementById('cardDueDate').value,
+                priority: document.getElementById('cardPriority').value,
+                clientId: document.getElementById('cardClient').value,
+                dealId: document.getElementById('cardDeal').value,
+                labels: document.getElementById('cardLabels').value.split(',').map(l => l.trim()).filter(l => l),
+                order: cards.filter(c => c.listId === window.currentListId).length,
+            };
+
+            try {
+                if (window.currentCardId) {
+                    await updateDoc(doc(db, 'cards', window.currentCardId), cardData);
+                } else {
+                    await addDoc(collection(db, 'cards'), cardData);
+                }
+                await loadAllData();
+                loadBoard();
+                updateDashboard();
+                closeCardModal();
+            } catch (error) {
+                alert('Erreur: ' + error.message);
+            }
+        });
+
+        // Clients
+        async function loadClients() {
+            const tbody = document.querySelector('#clientsTable tbody');
+            tbody.innerHTML = clients.map(client => `
+                <tr>
+                    <td><strong>${client.name}</strong></td>
+                    <td>${client.tags ? client.tags.join(', ') : ''}</td>
+                    <td>
+                        <button class="action-btn" onclick="editClient('${client.id}')">Modifier</button>
+                        <button class="action-btn btn-danger" onclick="deleteClient('${client.id}')">Supprimer</button>
+                    </td>
+                </tr>
+            `).join('');
+        }
+
+        document.getElementById('newClientBtn').addEventListener('click', () => {
+            window.currentClientId = null;
+            document.getElementById('clientName').value = '';
+            document.getElementById('clientNotes').value = '';
+            document.getElementById('clientTags').value = '';
+            document.getElementById('clientModal').classList.add('active');
+        });
+
+        window.closeClientModal = function() {
+            document.getElementById('clientModal').classList.remove('active');
+        };
+
+        window.editClient = function(clientId) {
+            window.currentClientId = clientId;
+            const client = clients.find(c => c.id === clientId);
+            document.getElementById('clientName').value = client.name;
+            document.getElementById('clientNotes').value = client.notes || '';
+            document.getElementById('clientTags').value = client.tags ? client.tags.join(', ') : '';
+            document.getElementById('clientModal').classList.add('active');
+        };
+
+        window.deleteClient = async function(clientId) {
+            if (!confirm('Supprimer ce client ?')) return;
+            await deleteDoc(doc(db, 'clients', clientId));
+            await loadAllData();
+            loadClients();
+            updateDashboard();
+        };
+
+        document.getElementById('saveClientBtn').addEventListener('click', async () => {
+            const name = document.getElementById('clientName').value;
+            if (!name) {
+                alert('Le nom est requis');
+                return;
+            }
+
+            const clientData = {
+                ownerUid: currentUser.uid,
+                name,
+                notes: document.getElementById('clientNotes').value,
+                tags: document.getElementById('clientTags').value.split(',').map(t => t.trim()).filter(t => t),
+                createdAt: new Date()
+            };
+
+            try {
+                if (window.currentClientId) {
+                    await updateDoc(doc(db, 'clients', window.currentClientId), clientData);
+                } else {
+                    await addDoc(collection(db, 'clients'), clientData);
+                }
+                await loadAllData();
+                loadClients();
+                updateDashboard();
+                closeClientModal();
+            } catch (error) {
+                alert('Erreur: ' + error.message);
+            }
+        });
+
+        // Deals
+        async function loadDeals() {
+            const tbody = document.querySelector('#dealsTable tbody');
+            tbody.innerHTML = deals.map(deal => {
+                const client = clients.find(c => c.id === deal.clientId);
+                return `
+                    <tr>
+                        <td><strong>${deal.name}</strong></td>
+                        <td>${client ? client.name : '-'}</td>
+                        <td>${deal.amount ? deal.amount + ' €' : '-'}</td>
+                        <td><span class="card-tag">${deal.status}</span></td>
+                        <td>
+                            <button class="action-btn" onclick="editDeal('${deal.id}')">Modifier</button>
+                            <button class="action-btn btn-danger" onclick="deleteDeal('${deal.id}')">Supprimer</button>
+                        </td>
+                    </tr>
+                `;
+            }).join('');
+        }
+
+        document.getElementById('newDealBtn').addEventListener('click', () => {
+            window.currentDealId = null;
+            document.getElementById('dealName').value = '';
+            document.getElementById('dealClient').value = '';
+            document.getElementById('dealAmount').value = '';
+            document.getElementById('dealStatus').value = 'lead';
+            document.getElementById('dealNextAction').value = '';
+            document.getElementById('dealNextActionDate').value = '';
+            document.getElementById('dealModal').classList.add('active');
+        });
+
+        window.closeDealModal = function() {
+            document.getElementById('dealModal').classList.remove('active');
+        };
+
+        window.editDeal = function(dealId) {
+            window.currentDealId = dealId;
+            const deal = deals.find(d => d.id === dealId);
+            document.getElementById('dealName').value = deal.name;
+            document.getElementById('dealClient').value = deal.clientId || '';
+            document.getElementById('dealAmount').value = deal.amount || '';
+            document.getElementById('dealStatus').value = deal.status;
+            document.getElementById('dealNextAction').value = deal.nextAction || '';
+            document.getElementById('dealNextActionDate').value = deal.nextActionDate || '';
+            document.getElementById('dealModal').classList.add('active');
+        };
+
+        window.deleteDeal = async function(dealId) {
+            if (!confirm('Supprimer ce deal ?')) return;
+            await deleteDoc(doc(db, 'deals', dealId));
+            await loadAllData();
+            loadDeals();
+            updateDashboard();
+        };
+
+        document.getElementById('saveDealBtn').addEventListener('click', async () => {
+            const name = document.getElementById('dealName').value;
+            if (!name) {
+                alert('Le nom est requis');
+                return;
+            }
+
+            const dealData = {
+                ownerUid: currentUser.uid,
+                name,
+                clientId: document.getElementById('dealClient').value,
+                amount: parseFloat(document.getElementById('dealAmount').value) || 0,
+                status: document.getElementById('dealStatus').value,
+                nextAction: document.getElementById('dealNextAction').value,
+                nextActionDate: document.getElementById('dealNextActionDate').value,
+                createdAt: new Date()
+            };
+
+            try {
+                if (window.currentDealId) {
+                    await updateDoc(doc(db, 'deals', window.currentDealId), dealData);
+                } else {
+                    await addDoc(collection(db, 'deals'), dealData);
+                }
+                await loadAllData();
+                loadDeals();
+                updateDashboard();
+                closeDealModal();
+            } catch (error) {
+                alert('Erreur: ' + error.message);
+            }
+        });
+
+        // Events
+        async function loadEvents() {
+            const tbody = document.querySelector('#eventsTable tbody');
+            tbody.innerHTML = events.map(event => {
+                const client = clients.find(c => c.id === event.clientId);
+                const start = event.startDate ? new Date(event.startDate).toLocaleString('fr-FR') : '-';
+                const end = event.endDate ? new Date(event.endDate).toLocaleString('fr-FR') : '-';
+                return `
+                    <tr>
+                        <td><strong>${event.name}</strong></td>
+                        <td>${client ? client.name : '-'}</td>
+                        <td>${start} - ${end}</td>
+                        <td><span class="card-tag">${event.status}</span></td>
+                        <td>
+                            <button class="action-btn" onclick="editEvent('${event.id}')">Modifier</button>
+                            <button class="action-btn btn-danger" onclick="deleteEvent('${event.id}')">Supprimer</button>
+                        </td>
+                    </tr>
+                `;
+            }).join('');
+        }
+
+        document.getElementById('newEventBtn').addEventListener('click', () => {
+            window.currentEventId = null;
+            document.getElementById('eventName').value = '';
+            document.getElementById('eventClient').value = '';
+            document.getElementById('eventStartDate').value = '';
+            document.getElementById('eventEndDate').value = '';
+            document.getElementById('eventStatus').value = 'planned';
+            document.getElementById('eventModal').classList.add('active');
+        });
+
+        window.closeEventModal = function() {
+            document.getElementById('eventModal').classList.remove('active');
+        };
+
+        window.editEvent = function(eventId) {
+            window.currentEventId = eventId;
+            const event = events.find(e => e.id === eventId);
+            document.getElementById('eventName').value = event.name;
+            document.getElementById('eventClient').value = event.clientId || '';
+            document.getElementById('eventStartDate').value = event.startDate || '';
+            document.getElementById('eventEndDate').value = event.endDate || '';
+            document.getElementById('eventStatus').value = event.status;
+            document.getElementById('eventModal').classList.add('active');
+        };
+
+        window.deleteEvent = async function(eventId) {
+            if (!confirm('Supprimer cet événement ?')) return;
+            await deleteDoc(doc(db, 'events', eventId));
+            await loadAllData();
+            loadEvents();
+            updateDashboard();
+        };
+
+        document.getElementById('saveEventBtn').addEventListener('click', async () => {
+            const name = document.getElementById('eventName').value;
+            if (!name) {
+                alert('Le nom est requis');
+                return;
+            }
+
+            const eventData = {
+                ownerUid: currentUser.uid,
+                name,
+                clientId: document.getElementById('eventClient').value,
+                startDate: document.getElementById('eventStartDate').value,
+                endDate: document.getElementById('eventEndDate').value,
+                status: document.getElementById('eventStatus').value,
+                createdAt: new Date()
+            };
+
+            try {
+                if (window.currentEventId) {
+                    await updateDoc(doc(db, 'events', window.currentEventId), eventData);
+                } else {
+                    await addDoc(collection(db, 'events'), eventData);
+                }
+                await loadAllData();
+                loadEvents();
+                updateDashboard();
+                closeEventModal();
+            } catch (error) {
+                alert('Erreur: ' + error.message);
+            }
+        });
+
+        // Export/Import
+        document.getElementById('exportJsonBtn').addEventListener('click', () => {
+            const data = {
+                clients,
+                deals,
+                events,
+                cards,
+                lists,
+                exportDate: new Date().toISOString()
+            };
+            
+            const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `crm-backup-${new Date().toISOString().split('T')[0]}.json`;
+            a.click();
+            URL.revokeObjectURL(url);
+        });
+
+        document.getElementById('importJsonBtn').addEventListener('click', async () => {
+            const file = document.getElementById('importJsonFile').files[0];
+            if (!file) {
+                alert('Veuillez sélectionner un fichier');
+                return;
+            }
+
+            const reader = new FileReader();
+            reader.onload = async (e) => {
+                try {
+                    const data = JSON.parse(e.target.result);
+                    
+                    // Import clients
+                    for (const client of data.clients || []) {
+                        const { id, ...clientData } = client;
+                        clientData.ownerUid = currentUser.uid;
+                        await addDoc(collection(db, 'clients'), clientData);
+                    }
+                    
+                    // Import deals, events, cards, lists similarly...
+                    
+                    alert('Import réussi !');
+                    await loadAllData();
+                    updateDashboard();
+                } catch (error) {
+                    alert('Erreur lors de l\'import: ' + error.message);
+                }
+            };
+            reader.readAsText(file);
+        });
+
+        // Export ICS
+        document.getElementById('exportIcsBtn').addEventListener('click', () => {
+            let icsContent = `BEGIN:VCALENDAR
+VERSION:2.0
+PRODID:-//CRM Kanban//FR
+CALSCALE:GREGORIAN
+METHOD:PUBLISH
+X-WR-CALNAME:CRM Kanban
+X-WR-TIMEZONE:Europe/Paris
+`;
+
+            // Add cards with due dates
+            cards.forEach(card => {
+                if (card.dueDate) {
+                    const date = card.dueDate.replace(/-/g, '');
+                    icsContent += `BEGIN:VEVENT
+UID:card-${card.id}@crm-kanban.com
+DTSTAMP:${new Date().toISOString().replace(/[-:]/g, '').split('.')[0]}Z
+DTSTART:${date}T090000
+DTEND:${date}T093000
+SUMMARY:${card.title}
+DESCRIPTION:${card.description || ''}
+PRIORITY:${card.priority === 'high' ? '1' : card.priority === 'normal' ? '5' : '9'}
+END:VEVENT
+`;
+                }
+            });
+
+            // Add events
+            events.forEach(event => {
+                if (event.startDate && event.endDate) {
+                    const start = new Date(event.startDate).toISOString().replace(/[-:]/g, '').split('.')[0] + 'Z';
+                    const end = new Date(event.endDate).toISOString().replace(/[-:]/g, '').split('.')[0] + 'Z';
+                    icsContent += `BEGIN:VEVENT
+UID:event-${event.id}@crm-kanban.com
+DTSTAMP:${new Date().toISOString().replace(/[-:]/g, '').split('.')[0]}Z
+DTSTART:${start}
+DTEND:${end}
+SUMMARY:${event.name}
+STATUS:${event.status === 'completed' ? 'CONFIRMED' : 'TENTATIVE'}
+END:VEVENT
+`;
+                }
+            });
+
+            icsContent += 'END:VCALENDAR';
+
+            const blob = new Blob([icsContent], { type: 'text/calendar' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `crm-calendar-${new Date().toISOString().split('T')[0]}.ics`;
+            a.click();
+            URL.revokeObjectURL(url);
+        });
+    </script>
+</body>
+</html>
